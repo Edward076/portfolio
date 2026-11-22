@@ -1,0 +1,577 @@
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+\documentclass[
+]{article}
+\usepackage{xcolor}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\setcounter{secnumdepth}{-\maxdimen} % remove section numbering
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math} % this also loads fontspec
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+\usepackage{lmodern}
+\ifPDFTeX\else
+  % xetex/luatex font selection
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+\usepackage{longtable,booktabs,array}
+\usepackage{calc} % for calculating minipage widths
+% Correct order of tables after \paragraph or \subparagraph
+\usepackage{etoolbox}
+\makeatletter
+\patchcmd\longtable{\par}{\if@noskipsec\mbox{}\fi\par}{}{}
+\makeatother
+% Allow footnotes in longtable head/foot
+\IfFileExists{footnotehyper.sty}{\usepackage{footnotehyper}}{\usepackage{footnote}}
+\makesavenoteenv{longtable}
+\usepackage{graphicx}
+\makeatletter
+\newsavebox\pandoc@box
+\newcommand*\pandocbounded[1]{% scales image to fit in text height/width
+  \sbox\pandoc@box{#1}%
+  \Gscale@div\@tempa{\textheight}{\dimexpr\ht\pandoc@box+\dp\pandoc@box\relax}%
+  \Gscale@div\@tempb{\linewidth}{\wd\pandoc@box}%
+  \ifdim\@tempb\p@<\@tempa\p@\let\@tempa\@tempb\fi% select the smaller of both
+  \ifdim\@tempa\p@<\p@\scalebox{\@tempa}{\usebox\pandoc@box}%
+  \else\usebox{\pandoc@box}%
+  \fi%
+}
+% Set default figure placement to htbp
+\def\fps@figure{htbp}
+\makeatother
+\setlength{\emergencystretch}{3em} % prevent overfull lines
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\usepackage{bookmark}
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+\urlstyle{same}
+\hypersetup{
+  pdftitle={基于 Barra 风格因子的产品超额收益归因分析},
+  pdfauthor={武宇翔},
+  hidelinks,
+  pdfcreator={LaTeX via pandoc}}
+
+\title{基于 Barra 风格因子的产品超额收益归因分析}
+\author{武宇翔}
+\date{2026-06-19}
+
+\begin{document}
+\maketitle
+
+\section{第一部分：Barra
+因子与产品超额收益的相关性分析}\label{ux7b2cux4e00ux90e8ux5206barra-ux56e0ux5b50ux4e0eux4ea7ux54c1ux8d85ux989dux6536ux76caux7684ux76f8ux5173ux6027ux5206ux6790}
+
+本部分为探索性分析，目的是初步筛选与产品超额收益相关的 Barra
+风格因子，并识别因子之间的多重共线性，为后续 PCA 与回归归因做准备。
+
+\subsection{1.1 读取 Barra
+因子并与超额收益对齐}\label{ux8bfbux53d6-barra-ux56e0ux5b50ux5e76ux4e0eux8d85ux989dux6536ux76caux5bf9ux9f50}
+
+Barra 数据为\textbf{日频因子组合累积指数}（首日 =
+1），需转换为周收益率后再与产品超额收益计算相关系数。
+
+\subsection{1.2
+因子指数转周收益率}\label{ux56e0ux5b50ux6307ux6570ux8f6cux5468ux6536ux76caux7387}
+
+\subsection{1.3 产品超额收益与各 Barra
+因子的相关系数}\label{ux4ea7ux54c1ux8d85ux989dux6536ux76caux4e0eux5404-barra-ux56e0ux5b50ux7684ux76f8ux5173ux7cfbux6570}
+
+\begin{longtable}[]{@{}llrrl@{}}
+\caption{表 1：产品超额收益与各 Barra 因子周收益率的 Pearson 相关系数（*
+p\textless0.05, ** p\textless0.01）}\tabularnewline
+\toprule\noalign{}
+因子中文名 & 因子 & 相关系数 & p值 & 显著性 \\
+\midrule\noalign{}
+\endfirsthead
+\toprule\noalign{}
+因子中文名 & 因子 & 相关系数 & p值 & 显著性 \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+规模 & size & -0.5204 & 0.0000 & ** \\
+杠杆 & leverage & 0.3259 & 0.0125 & * \\
+中市值 & mid\_cap & -0.2666 & 0.0431 & * \\
+长期反转 & long\_term\_reversal & 0.2560 & 0.0524 & . \\
+成长 & growth & -0.2344 & 0.0765 & . \\
+流动性 & liquidity & 0.2120 & 0.1102 & \\
+盈利能力 & profitability & -0.1890 & 0.1552 & \\
+盈利收益率 & earning\_yield & -0.1772 & 0.1833 & \\
+波动率 & volatility & -0.1041 & 0.4370 & \\
+投资质量 & investment\_quality & 0.0680 & 0.6118 & \\
+股息 & dividend & -0.0627 & 0.6403 & \\
+账面市值比 & book\_to\_price & 0.0280 & 0.8350 & \\
+动量 & momentum & 0.0055 & 0.9676 & \\
+盈利波动 & earning\_variability & -0.0048 & 0.9714 & \\
+贝塔 & beta & -0.0023 & 0.9861 & \\
+\end{longtable}
+
+\subsection{1.4 Barra
+因子之间的相关矩阵}\label{barra-ux56e0ux5b50ux4e4bux95f4ux7684ux76f8ux5173ux77e9ux9635}
+
+\begin{center}\includegraphics{基于Barra风格因子的产品超额收益归因分析_files/figure-latex/part1-corr-matrix-1} \end{center}
+
+\subsection{1.5
+超额收益与主要因子的散点图}\label{ux8d85ux989dux6536ux76caux4e0eux4e3bux8981ux56e0ux5b50ux7684ux6563ux70b9ux56fe}
+
+选取与超额收益相关性最强的 3 个因子作散点图，直观展示线性关系。
+
+\begin{center}\includegraphics{基于Barra风格因子的产品超额收益归因分析_files/figure-latex/part1-scatter-1} \end{center}
+
+\section{第二部分：PCA 对 Barra
+因子降维}\label{ux7b2cux4e8cux90e8ux5206pca-ux5bf9-barra-ux56e0ux5b50ux964dux7ef4}
+
+第一部分发现部分 Barra 因子之间存在中等程度相关（如 size 与
+mid\_cap），若将全部 15
+个因子直接放入多元回归，可能带来系数不稳定问题。本部分对 Barra
+因子周收益率矩阵做 \textbf{PCA
+主成分分析}，在保留主要因子波动信息的同时降低维度，并为第三部分主成分回归做准备。
+
+\subsection{2.1
+因子收益率矩阵标准化}\label{ux56e0ux5b50ux6536ux76caux7387ux77e9ux9635ux6807ux51c6ux5316}
+
+PCA
+前需对各因子收益率\textbf{标准化}（减均值、除以标准差），避免波动幅度大的因子
+dominate 主成分。
+
+\subsection{2.2 主成分分析}\label{ux4e3bux6210ux5206ux5206ux6790}
+
+对标准化后的因子矩阵做 PCA，提取主成分得分（PC
+scores）与载荷（loadings）。
+
+\subsection{2.3 方差解释率}\label{ux65b9ux5deeux89e3ux91caux7387}
+
+观察各主成分解释了多少因子总波动，并据此确定后续回归使用的主成分个数。
+
+\begin{longtable}[]{@{}lrr@{}}
+\caption{表 3：各主成分方差解释率（前 6 个）}\tabularnewline
+\toprule\noalign{}
+主成分 & 方差解释率 & 累积解释率 \\
+\midrule\noalign{}
+\endfirsthead
+\toprule\noalign{}
+主成分 & 方差解释率 & 累积解释率 \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+PC1 & 0.2342 & 0.2342 \\
+PC2 & 0.1465 & 0.3807 \\
+PC3 & 0.1311 & 0.5118 \\
+PC4 & 0.1041 & 0.6159 \\
+PC5 & 0.0713 & 0.6871 \\
+PC6 & 0.0541 & 0.7412 \\
+\end{longtable}
+
+\begin{center}\includegraphics{基于Barra风格因子的产品超额收益归因分析_files/figure-latex/part2-variance-1} \end{center}
+
+\subsection{2.4
+主成分载荷分析}\label{ux4e3bux6210ux5206ux8f7dux8377ux5206ux6790}
+
+载荷（loading）反映各原始因子在主成分上的权重，用于解读 PC1、PC2
+等的经济含义。
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.2532}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1392}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.2532}}
+  >{\raggedleft\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.0886}}
+  >{\raggedleft\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.0886}}
+  >{\raggedleft\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.0886}}
+  >{\raggedleft\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.0886}}@{}}
+\caption{表 4：前 4 个主成分的因子载荷}\tabularnewline
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+因子中文名
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+因子
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+PC1
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+PC2
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+PC3
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+PC4
+\end{minipage} \\
+\midrule\noalign{}
+\endfirsthead
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+因子中文名
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+因子
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+PC1
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+PC2
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+PC3
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+PC4
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+beta & 贝塔 & beta & 0.442 & 0.081 & 0.131 & -0.069 \\
+book\_to\_price & 账面市值比 & book\_to\_price & -0.111 & -0.020 & 0.500
+& 0.107 \\
+dividend & 股息 & dividend & -0.222 & -0.199 & -0.090 & 0.274 \\
+earning\_variability & 盈利波动 & earning\_variability & -0.087 & 0.438
+& 0.052 & 0.121 \\
+earning\_yield & 盈利收益率 & earning\_yield & -0.075 & 0.305 & 0.078 &
+0.482 \\
+growth & 成长 & growth & -0.139 & -0.221 & 0.116 & 0.482 \\
+investment\_quality & 投资质量 & investment\_quality & -0.315 & -0.217 &
+0.311 & 0.211 \\
+leverage & 杠杆 & leverage & -0.054 & -0.234 & 0.499 & -0.065 \\
+liquidity & 流动性 & liquidity & 0.166 & -0.466 & 0.082 & -0.163 \\
+long\_term\_reversal & 长期反转 & long\_term\_reversal & -0.217 & -0.320
+& -0.061 & -0.346 \\
+mid\_cap & 中市值 & mid\_cap & 0.267 & -0.390 & -0.156 & 0.290 \\
+momentum & 动量 & momentum & 0.395 & 0.060 & 0.241 & 0.022 \\
+profitability & 盈利能力 & profitability & 0.395 & -0.039 & 0.067 &
+0.161 \\
+size & 规模 & size & 0.218 & -0.198 & -0.386 & 0.352 \\
+volatility & 波动率 & volatility & -0.320 & -0.044 & -0.333 & -0.016 \\
+\end{longtable}
+
+\begin{center}\includegraphics{基于Barra风格因子的产品超额收益归因分析_files/figure-latex/part2-loadings-1} \end{center}
+
+\subsection{2.5
+主成分与产品超额收益的相关性}\label{ux4e3bux6210ux5206ux4e0eux4ea7ux54c1ux8d85ux989dux6536ux76caux7684ux76f8ux5173ux6027}
+
+在回归之前，先看各主成分与产品超额收益的线性关系，作为第三部分的对照。
+
+\begin{longtable}[]{@{}lrrl@{}}
+\caption{表 5：产品超额收益与各主成分的 Pearson 相关系数}\tabularnewline
+\toprule\noalign{}
+主成分 & 相关系数 & p值 & 显著性 \\
+\midrule\noalign{}
+\endfirsthead
+\toprule\noalign{}
+主成分 & 相关系数 & p值 & 显著性 \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+PC1 & -0.1213 & 0.3644 & \\
+PC2 & -0.0305 & 0.8200 & \\
+PC3 & 0.3063 & 0.0194 & * \\
+PC4 & -0.5060 & 0.0001 & ** \\
+\end{longtable}
+
+\section{第三部分：多因子回归归因}\label{ux7b2cux4e09ux90e8ux5206ux591aux56e0ux5b50ux56deux5f52ux5f52ux56e0}
+
+本部分在前两部分基础上，分别用\textbf{筛选后的原始 Barra 因子}（版本
+A）和 \textbf{PCA 主成分}（版本
+B）对产品超额收益做多元线性回归，比较两种方式的解释力，并判断超额收益更多来自风格暴露还是无法被因子解释的
+alpha。
+
+回归模型：
+
+\[
+\text{超额收益}_t = \alpha + \sum_i \beta_i \cdot \text{因子}_t + \varepsilon_t
+\]
+
+\subsection{3.1
+产品累计超额收益走势}\label{ux4ea7ux54c1ux7d2fux8ba1ux8d85ux989dux6536ux76caux8d70ux52bf}
+
+\begin{center}\includegraphics{基于Barra风格因子的产品超额收益归因分析_files/figure-latex/part3-cum-excess-1} \end{center}
+
+\subsection{3.2 版本
+A：筛选因子多元回归}\label{ux7248ux672c-aux7b5bux9009ux56e0ux5b50ux591aux5143ux56deux5f52}
+
+使用第一部分筛选出的因子（\texttt{筛选因子}）作为解释变量，估计各风格暴露及截距
+alpha。
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1642}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.2836}}
+  >{\raggedleft\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1194}}
+  >{\raggedleft\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1045}}
+  >{\raggedleft\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1194}}
+  >{\raggedleft\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1045}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1045}}@{}}
+\caption{表 6：版本 A --- 筛选因子回归（size + leverage + mid\_cap +
+long\_term\_reversal + growth）}\tabularnewline
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+变量中文名
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+变量
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+估计值
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+标准误
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+t值
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+p值
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+显著性
+\end{minipage} \\
+\midrule\noalign{}
+\endfirsthead
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+变量中文名
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+变量
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+估计值
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+标准误
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+t值
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+p值
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+显著性
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+截距 (α) & (Intercept) & 0.0031 & 0.0011 & 2.7523 & 0.0081 & ** \\
+规模 & size & -0.7205 & 0.2413 & -2.9863 & 0.0043 & ** \\
+杠杆 & leverage & 0.8868 & 0.5432 & 1.6325 & 0.1086 & \\
+中市值 & mid\_cap & 0.1427 & 0.4483 & 0.3183 & 0.7515 & \\
+长期反转 & long\_term\_reversal & 0.5769 & 0.3189 & 1.8091 & 0.0762 &
+. \\
+成长 & growth & -1.3043 & 0.6488 & -2.0103 & 0.0496 & * \\
+\end{longtable}
+
+\textbf{p 值怎么读？} p
+值表示「该变量对超额收益没有解释力」时，仍观察到当前结果的概率。\textbf{p
+值越小，该因子在控制其他变量后，对超额收益的解释越重要}（越不像随机噪声）。一般
+p \textless{} 0.05 认为显著，p \textless{} 0.01 认为高度显著。
+
+\textbf{本表结论（版本 A）：}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{截距 α}（p =
+  0.0081）：显著为正，说明扣掉所列风格因子后，产品仍有稳定的每周 alpha。
+\item
+  \textbf{对超额解释最重要的风格因子}（p \textless{} 0.05，按 p
+  值从小到大）： 规模（β = -0.7205，p = 0.0043）； 成长（β = -1.3043，p
+  = 0.0496）。
+\item
+  \textbf{弱显著}（0.05 ≤ p \textless{} 0.10）：长期反转（p =
+  0.0762），仅供参考。
+\item
+  \textbf{对超额解释不显著}（p ≥ 0.10）：杠杆（p = 0.1086）、中市值（p =
+  0.7515），在多元模型中可认为对样本期内超额波动\textbf{解释力有限}。
+\end{itemize}
+
+\subsection{3.3 版本
+B：主成分多元回归}\label{ux7248ux672c-bux4e3bux6210ux5206ux591aux5143ux56deux5f52}
+
+使用第二部分建议的主成分（\texttt{使用主成分}）作为解释变量，避免原始因子共线性带来的系数不稳定。
+
+\begin{longtable}[]{@{}llrrrrl@{}}
+\caption{表 7：版本 B --- 主成分回归（PC1 + PC2 + PC3 +
+PC4）}\tabularnewline
+\toprule\noalign{}
+变量中文名 & 变量 & 估计值 & 标准误 & t值 & p值 & 显著性 \\
+\midrule\noalign{}
+\endfirsthead
+\toprule\noalign{}
+变量中文名 & 变量 & 估计值 & 标准误 & t值 & p值 & 显著性 \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+截距 (α) & (Intercept) & 0.0044 & 0.0011 & 3.9962 & 0.0002 & ** \\
+PC1 & PC1 & -0.0007 & 0.0006 & -1.1087 & 0.2726 & \\
+PC2 & PC2 & -0.0002 & 0.0007 & -0.2790 & 0.7813 & \\
+PC3 & PC3 & 0.0022 & 0.0008 & 2.7992 & 0.0071 & ** \\
+PC4 & PC4 & -0.0041 & 0.0009 & -4.6250 & 0.0000 & ** \\
+\end{longtable}
+
+\textbf{p 值怎么读？} 与版本 A 相同：主成分系数 γ 的 p 值越小，说明该
+\textbf{PC 对超额收益越重要}。PC
+是多个原始因子的线性组合，显著的主成分需结合第二部分载荷表理解其风格含义。
+
+\textbf{本表结论（版本 B）：}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{截距 α}（p = 0.0002）：显著，扣除主成分后仍有无法被 PC
+  解释的正向超额。
+\item
+  \textbf{对超额解释最重要的主成分}（p \textless{} 0.05，p
+  越小越重要）： PC4（γ = -0.0041，p = 0.0000）； PC3（γ = +0.0022，p =
+  0.0071）。
+\item
+  \textbf{对超额解释不显著}（p ≥ 0.05）：PC1（p = 0.2726）、PC2（p =
+  0.7813）。这些 PC 虽解释因子间波动，但对产品超额\textbf{贡献有限}（与
+  2.5 结论一致）。
+\end{itemize}
+
+\subsection{3.4
+两种模型对比}\label{ux4e24ux79cdux6a21ux578bux5bf9ux6bd4}
+
+\begin{longtable}[]{@{}lrr@{}}
+\caption{表 8：两种回归模型拟合效果对比}\tabularnewline
+\toprule\noalign{}
+指标 & 版本A\_筛选因子 & 版本B\_主成分 \\
+\midrule\noalign{}
+\endfirsthead
+\toprule\noalign{}
+指标 & 版本A\_筛选因子 & 版本B\_主成分 \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+R² & 0.3889 & 0.3655 \\
+调整 R² & 0.3301 & 0.3176 \\
+AIC & -383.7043 & -383.5310 \\
+BIC & -369.2812 & -371.1683 \\
+残差标准误 & 0.0083 & 0.0084 \\
+\end{longtable}
+
+\subsection{3.5 拟合值与残差：风格解释 vs
+alpha}\label{ux62dfux5408ux503cux4e0eux6b8bux5deeux98ceux683cux89e3ux91ca-vs-alpha}
+
+表 9 对比 \textbf{版本 A（筛选因子回归）} 与 \textbf{版本
+B（主成分回归）} 两种模型下，样本期平均超额收益如何拆成「截距
+α（风格无法解释的部分）」与「风格拟合（因子/主成分能解释的部分）」；左列、右列分别对应两种归因口径，便于对照同一指标在两种模型下的差异。
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.4930}}
+  >{\raggedleft\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.2676}}
+  >{\raggedleft\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.2394}}@{}}
+\caption{表 9：超额收益归因分解（左列 = 版本 A，右列 = 版本
+B）}\tabularnewline
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+指标
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+版本 A（筛选因子）
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+版本 B（主成分）
+\end{minipage} \\
+\midrule\noalign{}
+\endfirsthead
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+指标
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+版本 A（筛选因子）
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+版本 B（主成分）
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+周均超额收益 & 0.0044 & 0.0044 \\
+截距 α（周均无法被因子解释的部分） & 0.0031 & 0.0044 \\
+风格拟合均值 & 0.0013 & 0.0000 \\
+残差均值 & -0.0000 & -0.0000 \\
+\end{longtable}
+
+\textbf{读表说明：} 每一行有\textbf{两个独立数字}，左列为版本
+A（筛选因子回归），右列为版本
+B（主成分回归）。例如「周均超额收益」一行：版本 A =
+\textbf{0.0044}，版本 B =
+\textbf{0.0044}（二者应接近，均为样本期平均超额）。
+
+\begin{center}\includegraphics{基于Barra风格因子的产品超额收益归因分析_files/figure-latex/part3-attribution-plot-a-1} \end{center}
+
+\begin{center}\includegraphics{基于Barra风格因子的产品超额收益归因分析_files/figure-latex/part3-attribution-b-1} \end{center}
+
+\subsection{3.6
+研究结论与局限性}\label{ux7814ux7a76ux7ed3ux8bbaux4e0eux5c40ux9650ux6027}
+
+\subsubsection{研究结论}\label{ux7814ux7a76ux7ed3ux8bba}
+
+在 58 周样本内，筛选 Barra 因子可解释约 \textbf{39\%} 的超额波动，调整
+R² 约 \textbf{33\%}。规模、成长暴露显著为负，截距 alpha 显著为正。PCA
+主成分回归调整 R² 约 \textbf{32\%}，略低于因子版，因 PCA
+按因子波动而非超额相关性构造，PC1、PC2
+对超额解释力弱。综合来看，产品超额与\textbf{规模风格}关系最明显，但仍有约
+\textbf{61\%} 波动无法被所选 Barra
+因子线性解释，需结合样本期短、归因口径简化等局限性谨慎解读。
+
+\subsubsection{产品涨跌与什么有关？（Barra
+风格解读）}\label{ux4ea7ux54c1ux6da8ux8dccux4e0eux4ec0ux4e48ux6709ux5173barra-ux98ceux683cux89e3ux8bfb}
+
+结合表 1 相关性与表 6 回归，样本期内产品超额（相对中证
+1000）主要与以下因素有关：
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.2727}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.2727}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.4545}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+维度
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+判断
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+通俗理解
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\textbf{规模（size）} & 相关最强（r ≈ -0.52），回归显著负向 &
+小盘/规模因子表现强时，产品超额往往偏弱；规模因子走弱时，超额往往更好。产品相对中证
+1000 \textbf{偏大盘或低小盘暴露}，不是「小盘行情驱动超额」的类型 \\
+\textbf{成长（growth）} & 多元回归显著负向 &
+成长风格涨得多时，超额倾向走弱；与偏价值/低成长暴露或持仓结构有关 \\
+\textbf{杠杆、中市值等} & 单因子相关有一定关系，多元回归不显著 &
+对超额有弱线索，但不是主因 \\
+\textbf{动量、行业类 proxy 等} & 与超额几乎无线性相关 &
+样本内\textbf{难以用}「追热点、动量行情」解释超额 \\
+\textbf{截距 α} & 显著为正 &
+扣掉规模、成长等风格后，仍有\textbf{稳定的正超额}，更像选股、配置或
+Barra 未覆盖因素带来的 alpha，而非单一风格 bet \\
+\end{longtable}
+
+\subsubsection{局限性}\label{ux5c40ux9650ux6027}
+
+\begin{itemize}
+\tightlist
+\item
+  样本量有限（约 58 周），统计检验功效受限；
+\item
+  仅考察线性关系，未控制时变暴露与滞后效应；
+\item
+  超额收益为算术差，与 Barra 组合收益口径可能存在差异；
+\item
+  相关与回归结果均为样本内拟合，不代表未来持续有效。
+\end{itemize}
+
+\end{document}

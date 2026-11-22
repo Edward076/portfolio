@@ -1,0 +1,1 @@
+"""Scientific RAG evaluation package."""

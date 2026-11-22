@@ -1,0 +1,782 @@
+---
+title: "基于 Barra 风格因子的产品超额收益归因分析"
+author: "武宇翔"
+date: "2026-06-19"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo      = TRUE,
+  message   = FALSE,
+  warning   = FALSE,
+  fig.align = "center"
+)
+```
+
+```{r 处理数据, include=FALSE}
+library(readxl)
+library(dplyr)
+library(lubridate)
+#先处理原始数据，把基金收益归一化后和同样归一化后的中证1000进行增量计算（减法）
+
+# 1. 读取数据
+产品净值 <- read_excel("产品净值.xlsx", sheet = 1)
+指数数据 <- read_excel("K线导出_000852_日线数据.xlsx", sheet = 1)
+
+# 2. 清洗
+产品净值 <- arrange(
+  mutate(产品净值, 日期 = as.Date(日期)),
+  日期
+)
+
+指数数据 <- arrange(
+  select(
+    mutate(指数数据, 日期 = as.Date(交易时间)),
+    日期, 收盘价
+  ),
+  日期
+)
+
+# 3. 对齐
+aligned <- filter(
+  left_join(产品净值, 指数数据, by = "日期"),
+  !is.na(收盘价)
+)
+
+# 4. 计算归一化因子（后一天 / 前一天）
+aligned <- mutate(
+  aligned,
+  复权净值因子 = 复权净值 / lag(复权净值),
+  收盘价因子   = 收盘价 / lag(收盘价)
+)
+
+# ---------- 核心修改：减法计算超额 ----------
+aligned <- mutate(
+  aligned,
+  # 每日超额因子 = 产品因子 - 指数因子（算术差）
+  每日超额因子 = 复权净值因子 - 收盘价因子
+)
+
+# 保存
+write.csv(aligned, "超额收益结果_减法版.csv", row.names = FALSE)
+```
+
+# Introduction
+
+## 一、研究背景与研究目的
+
+在资产管理实践中，评价一只产品不仅要看绝对收益，更要看其相对业绩基准的超额表现，并进一步追问：超额收益来自稳定的选股与配置能力（alpha），还是来自对某些市场风格因子的暴露（beta）？若不能将二者区分，就难以对产品的风险来源与收益驱动形成清晰认识。
+
+Barra 多因子模型将股票收益分解为若干可观测的**风格因子**（如规模、成长、动量、杠杆等），是业界常用的风险与归因工具。本报告以一只基金产品为研究对象，在中证 1000 指数基准下，利用 Barra 风格因子数据，对其超额收益进行探索性归因分析。研究目的可概括为：
+
+1. **识别**与产品超额收益显著相关的 Barra 风格因子；
+2. **检验**因子之间是否存在多重共线性，必要时通过主成分分析（PCA）降维；
+3. **估计**多元线性回归下各因子的边际解释力，并比较「原始筛选因子」与「PCA 主成分」两种建模方式的拟合效果；
+4. **初步判断**样本期内产品超额更多体现为风格暴露，还是回归截距所代表的、无法被 Barra 因子线性解释的 alpha。
+
+本研究属于**样本内、周频、线性**的探索性分析，旨在为后续更精细的持仓暴露归因或行业归因提供方向，不构成投资建议。
+
+## 二、数据说明
+
+本报告使用三类数据，经日期对齐后统一为**周频**样本（有效观测约 58 周）：
+
+| 数据类型 | 来源 | 主要字段与处理 |
+|----------|------|----------------|
+| **产品净值** | `产品净值.xlsx` | 复权净值；按相邻交易日计算周收益率 |
+| **业绩基准** | `K线导出_000852_日线数据.xlsx`（中证 1000，代码 000852） | 收盘价；计算指数周收益率 |
+| **Barra 风格因子** | `Barra因子.xlsx` | 15 个风格因子的累积组合指数（首日 = 1）；转换为周收益率 |
+
+# 第一部分：Barra 因子与产品超额收益的相关性分析
+
+本部分为探索性分析，目的是初步筛选与产品超额收益相关的 Barra 风格因子，并识别因子之间的多重共线性，为后续 PCA 与回归归因做准备。
+
+```{r part1-opts, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## 1.1 读取 Barra 因子并与超额收益对齐
+
+Barra 数据为**日频因子组合累积指数**（首日 = 1），需转换为周收益率后再与产品超额收益计算相关系数。
+
+```{r part1-load}
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(knitr)
+
+# Barra 风格因子列名（与 Excel 一致）
+因子列 <- c(
+  "beta", "book_to_price", "dividend", "earning_variability",
+  "earning_yield", "growth", "investment_quality", "leverage",
+  "liquidity", "long_term_reversal", "mid_cap", "momentum",
+  "profitability", "size", "volatility"
+)
+
+# 因子中文名（报告展示用）
+因子中文名 <- c(
+  beta                 = "贝塔",
+  book_to_price        = "账面市值比",
+  dividend             = "股息",
+  earning_variability  = "盈利波动",
+  earning_yield        = "盈利收益率",
+  growth               = "成长",
+  investment_quality   = "投资质量",
+  leverage             = "杠杆",
+  liquidity            = "流动性",
+  long_term_reversal   = "长期反转",
+  mid_cap              = "中市值",
+  momentum             = "动量",
+  profitability        = "盈利能力",
+  size                 = "规模",
+  volatility           = "波动率"
+)
+
+# 1. 读取 Barra 因子指数
+Barra因子 <- mutate(
+  read_excel("Barra因子.xlsx", sheet = 1),
+  日期 = as.Date(as.character(日期), format = "%Y%m%d"),
+  across(all_of(因子列), as.numeric)
+)
+
+# 2. 提取产品超额收益，按日期与 Barra 对齐
+分析数据 <- arrange(
+  inner_join(
+    select(aligned, 日期, 每日超额因子),
+    Barra因子,
+    by = "日期"
+  ),
+  日期
+)
+```
+
+## 1.2 因子指数转周收益率
+
+```{r part1-returns}
+# 累积指数 → 周收益率：R_t = Index_t / Index_{t-1} - 1
+# 不用 across：beta 等列名会与 stats::beta() 等内置函数冲突
+for (f in 因子列) {
+  v <- as.numeric(分析数据[[f]])
+  分析数据[[f]] <- v / dplyr::lag(v) - 1
+}
+分析数据 <- filter(分析数据, !is.na(每日超额因子))
+```
+
+## 1.3 产品超额收益与各 Barra 因子的相关系数
+
+```{r part1-corr-excess}
+# 计算 Pearson 相关系数及显著性检验
+相关列表 <- lapply(因子列, function(f) {
+  ct <- cor.test(分析数据$每日超额因子, 分析数据[[f]], method = "pearson")
+  tibble(
+    因子       = f,
+    因子中文名 = 因子中文名[f],
+    相关系数   = unname(ct$estimate),
+    p值        = ct$p.value
+  )
+})
+
+超额因子相关 <- arrange(
+  mutate(
+    bind_rows(相关列表),
+    绝对值 = abs(相关系数),
+    显著性 = case_when(
+      p值 < 0.01 ~ "**",
+      p值 < 0.05 ~ "*",
+      p值 < 0.10 ~ ".",
+      TRUE       ~ ""
+    )
+  ),
+  desc(绝对值)
+)
+
+kable(
+  select(超额因子相关, 因子中文名, 因子, 相关系数, p值, 显著性),
+  digits  = 4,
+  caption = "表 1：产品超额收益与各 Barra 因子周收益率的 Pearson 相关系数（* p<0.05, ** p<0.01）"
+)
+```
+
+## 1.4 Barra 因子之间的相关矩阵
+
+```{r part1-corr-matrix, fig.width=9, fig.height=7}
+因子相关矩阵 <- cor(分析数据[, 因子列], use = "complete.obs")
+
+# 相关矩阵热力图
+热力图数据 <- as.data.frame(因子相关矩阵)
+热力图数据 <- mutate(热力图数据, f1 = rownames(热力图数据))
+热力图数据 <- pivot_longer(热力图数据, -f1, names_to = "f2", values_to = "corr")
+热力图数据 <- mutate(
+  热力图数据,
+  f1 = factor(f1, levels = 因子列),
+  f2 = factor(f2, levels = rev(因子列))
+)
+
+ggplot(热力图数据, aes(f1, f2, fill = corr)) +
+  geom_tile(color = "white", size = 0.3) +
+  geom_text(aes(label = sprintf("%.2f", corr)), size = 2.5) +
+  scale_fill_gradient2(
+    low      = "#2166AC",
+    mid      = "white",
+    high     = "#B2182B",
+    midpoint = 0,
+    limits   = c(-1, 1),
+    name     = "相关系数"
+  ) +
+  labs(
+    title = "图 1：Barra 风格因子周收益率相关矩阵",
+    x     = NULL,
+    y     = NULL
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid  = element_blank(),
+    plot.title  = element_text(hjust = 0.5, face = "bold")
+  )
+
+# 供第三部分回归使用的因子筛选（|r| 排名前 5，剔除 |r|>0.7 共线）
+候选因子 <- pull(slice_head(超额因子相关, n = 5), 因子)
+筛选因子 <- c()
+for (f in 候选因子) {
+  冲突 <- any(sapply(筛选因子, function(g) {
+    abs(因子相关矩阵[f, g]) > 0.7
+  }))
+  if (!冲突) 筛选因子 <- c(筛选因子, f)
+}
+```
+
+## 1.5 超额收益与主要因子的散点图
+
+选取与超额收益相关性最强的 3 个因子作散点图，直观展示线性关系。
+
+```{r part1-scatter, fig.width=9, fig.height=3.5}
+top3 <- 超额因子相关$因子[1:3]
+
+散点图数据 <- select(分析数据, 每日超额因子, all_of(top3))
+散点图数据 <- pivot_longer(散点图数据, -每日超额因子, names_to = "因子", values_to = "因子收益")
+散点图数据 <- mutate(散点图数据, 因子中文名 = 因子中文名[因子])
+
+ggplot(散点图数据, aes(x = 因子收益, y = 每日超额因子)) +
+  geom_point(alpha = 0.7, size = 2, color = "#2166AC") +
+  geom_smooth(method = "lm", se = TRUE, color = "#B2182B", size = 0.8) +
+  facet_wrap(~ 因子中文名, scales = "free_x", nrow = 1) +
+  labs(
+    title = "图 2：产品超额收益与 Top 3 因子的散点图",
+    x     = "因子周收益率",
+    y     = "产品超额收益"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+```
+
+```{r part1-opts-reset, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 第二部分：PCA 对 Barra 因子降维
+
+第一部分发现部分 Barra 因子之间存在中等程度相关（如 size 与 mid_cap），若将全部 15 个因子直接放入多元回归，可能带来系数不稳定问题。本部分对 Barra 因子周收益率矩阵做 **PCA 主成分分析**，在保留主要因子波动信息的同时降低维度，并为第三部分主成分回归做准备。
+
+```{r part2-opts, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## 2.1 因子收益率矩阵标准化
+
+PCA 前需对各因子收益率**标准化**（减均值、除以标准差），避免波动幅度大的因子 dominate 主成分。
+
+```{r part2-prep}
+# 提取因子收益率矩阵（T × 15）
+因子矩阵 <- as.matrix(分析数据[, 因子列])
+因子矩阵标准 <- scale(因子矩阵)
+```
+
+## 2.2 主成分分析
+
+对标准化后的因子矩阵做 PCA，提取主成分得分（PC scores）与载荷（loadings）。
+
+```{r part2-pca}
+因子PCA <- prcomp(因子矩阵标准, center = FALSE, scale. = FALSE)
+
+# 主成分得分并入分析数据，供第三部分回归使用
+PC列名 <- paste0("PC", seq_len(ncol(因子PCA$x)))
+PC得分 <- as.data.frame(因子PCA$x)
+colnames(PC得分) <- PC列名
+分析数据 <- bind_cols(分析数据, PC得分)
+
+# 方差解释
+方差解释率 <- (因子PCA$sdev^2) / sum(因子PCA$sdev^2)
+累积方差解释率 <- cumsum(方差解释率)
+展示PC数 <- min(6, length(方差解释率))
+```
+
+## 2.3 方差解释率
+
+观察各主成分解释了多少因子总波动，并据此确定后续回归使用的主成分个数。
+
+```{r part2-variance, fig.width=8, fig.height=4.5}
+方差解释表 <- tibble(
+  主成分     = paste0("PC", seq_along(方差解释率)),
+  方差解释率 = 方差解释率,
+  累积解释率 = 累积方差解释率
+)
+
+kable(
+  slice_head(方差解释表, n = 展示PC数),
+  digits  = 4,
+  caption = "表 3：各主成分方差解释率（前 6 个）"
+)
+
+# 建议主成分数：累积解释率 ≥ 80%，且不超过 4 个（样本量有限）
+建议主成分数 <- which(累积方差解释率 >= 0.80)[1]
+if (is.na(建议主成分数)) 建议主成分数 <- min(4, length(方差解释率))
+建议主成分数 <- min(建议主成分数, 4)
+使用主成分 <- PC列名[1:建议主成分数]
+
+# 碎石图：方差解释率 + 累积曲线
+碎石图数据 <- slice_head(方差解释表, n = 展示PC数)
+碎石图数据 <- mutate(碎石图数据, 主成分 = factor(主成分, levels = 主成分))
+
+ggplot(碎石图数据, aes(x = 主成分, y = 方差解释率)) +
+  geom_col(fill = "#2166AC", alpha = 0.85, width = 0.6) +
+  geom_line(aes(y = 累积解释率, group = 1), color = "#B2182B", size = 1) +
+  geom_point(aes(y = 累积解释率), color = "#B2182B", size = 2.5) +
+  scale_y_continuous(
+    labels = function(x) paste0(round(x * 100, 0), "%"),
+    limits = c(0, 1)
+  ) +
+  labs(
+    title = "图 3：PCA 碎石图（柱 = 各 PC 方差解释率，线 = 累积解释率）",
+    x     = "主成分",
+    y     = "方差解释率"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+```
+
+## 2.4 主成分载荷分析
+
+载荷（loading）反映各原始因子在主成分上的权重，用于解读 PC1、PC2 等的经济含义。
+
+```{r part2-loadings, fig.width=9, fig.height=5}
+载荷展示数 <- min(4, 建议主成分数)
+载荷矩阵 <- 因子PCA$rotation[, 1:载荷展示数, drop = FALSE]
+
+载荷表 <- as.data.frame(载荷矩阵)
+载荷表 <- mutate(
+  载荷表,
+  因子       = rownames(载荷矩阵),
+  因子中文名 = 因子中文名[因子],
+  .before    = 1
+)
+
+kable(
+  select(载荷表, 因子中文名, 因子, everything()),
+  digits  = 3,
+  caption = paste0("表 4：前 ", 载荷展示数, " 个主成分的因子载荷")
+)
+
+# 载荷热力图
+载荷热力图数据 <- pivot_longer(
+  载荷表,
+  cols      = starts_with("PC"),
+  names_to  = "主成分",
+  values_to = "载荷"
+)
+载荷热力图数据 <- mutate(
+  载荷热力图数据,
+  因子中文名 = factor(因子中文名, levels = 因子中文名[因子列]),
+  主成分     = factor(主成分, levels = paste0("PC", 1:载荷展示数))
+)
+
+ggplot(载荷热力图数据, aes(x = 主成分, y = 因子中文名, fill = 载荷)) +
+  geom_tile(color = "white", size = 0.3) +
+  geom_text(aes(label = sprintf("%.2f", 载荷)), size = 3) +
+  scale_fill_gradient2(
+    low      = "#2166AC",
+    mid      = "white",
+    high     = "#B2182B",
+    midpoint = 0,
+    limits   = c(-1, 1),
+    name     = "载荷"
+  ) +
+  labs(
+    title = paste0("图 4：前 ", 载荷展示数, " 个主成分因子载荷热力图"),
+    x     = "主成分",
+    y     = NULL
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    panel.grid = element_blank()
+  )
+```
+
+## 2.5 主成分与产品超额收益的相关性
+
+在回归之前，先看各主成分与产品超额收益的线性关系，作为第三部分的对照。
+
+```{r part2-pc-corr}
+PC相关列表 <- lapply(使用主成分, function(pc) {
+  ct <- cor.test(分析数据$每日超额因子, 分析数据[[pc]], method = "pearson")
+  tibble(
+    主成分   = pc,
+    相关系数 = unname(ct$estimate),
+    p值      = ct$p.value
+  )
+})
+
+PC超额相关 <- bind_rows(PC相关列表)
+PC超额相关 <- mutate(
+  PC超额相关,
+  显著性 = case_when(
+    p值 < 0.01 ~ "**",
+    p值 < 0.05 ~ "*",
+    p值 < 0.10 ~ ".",
+    TRUE       ~ ""
+  )
+)
+
+kable(
+  PC超额相关,
+  digits  = 4,
+  caption = "表 5：产品超额收益与各主成分的 Pearson 相关系数"
+)
+```
+
+```{r part2-opts-reset, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 第三部分：多因子回归归因
+
+本部分在前两部分基础上，分别用**筛选后的原始 Barra 因子**（版本 A）和 **PCA 主成分**（版本 B）对产品超额收益做多元线性回归，比较两种方式的解释力，并判断超额收益更多来自风格暴露还是无法被因子解释的 alpha。
+
+回归模型：
+
+$$
+\text{超额收益}_t = \alpha + \sum_i \beta_i \cdot \text{因子}_t + \varepsilon_t
+$$
+
+```{r part3-opts, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## 3.1 产品累计超额收益走势
+
+```{r part3-cum-excess, fig.width=8, fig.height=4}
+累计超额数据 <- arrange(分析数据, 日期)
+累计超额数据 <- mutate(
+  累计超额数据,
+  累计超额 = cumsum(每日超额因子)
+)
+
+ggplot(累计超额数据, aes(x = 日期, y = 累计超额)) +
+  geom_line(color = "#2166AC", size = 0.9) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
+  labs(
+    title = "图 5：产品累计超额收益（相对中证1000）",
+    x     = NULL,
+    y     = "累计超额收益"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+```
+
+## 3.2 版本 A：筛选因子多元回归
+
+使用第一部分筛选出的p值较小的因子（`筛选因子`）作为解释变量，估计各风格暴露及截距 alpha。
+
+```{r part3-reg-factors}
+# 整理回归结果的小工具
+整理回归结果 <- function(model, 名称映射 = NULL) {
+  s       <- summary(model)
+  coef_df <- as.data.frame(s$coefficients)
+  coef_df$变量 <- rownames(coef_df)
+  rownames(coef_df) <- NULL
+  names(coef_df) <- c("估计值", "标准误", "t值", "p值", "变量")
+  coef_df <- coef_df[, c("变量", "估计值", "标准误", "t值", "p值")]
+
+  变量中文名 <- coef_df$变量
+  if (!is.null(名称映射)) {
+    idx <- 变量中文名 %in% names(名称映射)
+    变量中文名[idx] <- 名称映射[变量中文名[idx]]
+  }
+  变量中文名[coef_df$变量 == "(Intercept)"] <- "截距 (α)"
+
+  coef_df <- mutate(
+    coef_df,
+    变量中文名 = 变量中文名,
+    显著性 = case_when(
+      p值 < 0.01 ~ "**",
+      p值 < 0.05 ~ "*",
+      p值 < 0.10 ~ ".",
+      TRUE       ~ ""
+    )
+  )
+  list(
+    系数表   = coef_df,
+    R2       = s$r.squared,
+    调整R2   = s$adj.r.squared,
+    F统计量  = s$fstatistic,
+    模型对象 = model
+  )
+}
+
+公式A <- as.formula(
+  paste("每日超额因子 ~", paste(筛选因子, collapse = " + "))
+)
+模型A <- lm(公式A, data = 分析数据)
+结果A <- 整理回归结果(模型A, 因子中文名)
+
+kable(
+  select(结果A$系数表, 变量中文名, 变量, 估计值, 标准误, t值, p值, 显著性),
+  digits  = 4,
+  caption = paste0(
+    "表 6：版本 A — 筛选因子回归（",
+    paste(筛选因子, collapse = " + "),
+    "）"
+  )
+)
+```
+
+```{r part3-interpret-a, echo=FALSE, results='asis'}
+cat("**p 值怎么读？** p 值表示「该变量对超额收益没有解释力」时，仍观察到当前结果的概率。**p 值越小，该因子在控制其他变量后，对超额收益的解释越重要**（越不像随机噪声）。一般 p < 0.05 认为显著，p < 0.01 认为高度显著。\n\n")
+
+sig_a <- filter(结果A$系数表, 变量 != "(Intercept)", p值 < 0.05)
+weak_a <- filter(结果A$系数表, 变量 != "(Intercept)", p值 >= 0.05 & p值 < 0.10)
+ns_a <- filter(结果A$系数表, 变量 != "(Intercept)", p值 >= 0.10)
+alpha_a <- filter(结果A$系数表, 变量 == "(Intercept)")
+
+cat("**本表结论（版本 A）：**\n\n")
+if (alpha_a$p值[1] < 0.05) {
+  cat(sprintf("- **截距 α**（p = %.4f）：显著为正，说明扣掉所列风格因子后，产品仍有稳定的每周 alpha。\n", alpha_a$p值[1]))
+}
+if (nrow(sig_a) > 0) {
+  ord <- order(sig_a$p值)
+  cat("- **对超额解释最重要的风格因子**（p < 0.05，按 p 值从小到大）：")
+  for (i in seq_len(nrow(sig_a))) {
+    r <- sig_a[ord[i], ]
+    cat(sprintf(" %s（β = %+.4f，p = %.4f）", r$变量中文名, r$估计值, r$p值))
+    if (i < nrow(sig_a)) cat("；")
+  }
+  cat("。\n")
+}
+if (nrow(weak_a) > 0) {
+  cat("- **弱显著**（0.05 ≤ p < 0.10）：")
+  for (i in seq_len(nrow(weak_a))) {
+    r <- weak_a[i, ]
+    cat(sprintf("%s（p = %.4f）", r$变量中文名, r$p值))
+    if (i < nrow(weak_a)) cat("、")
+  }
+  cat("，仅供参考。\n")
+}
+if (nrow(ns_a) > 0) {
+  cat("- **对超额解释不显著**（p ≥ 0.10）：")
+  for (i in seq_len(nrow(ns_a))) {
+    r <- ns_a[i, ]
+    cat(sprintf("%s（p = %.4f）", r$变量中文名, r$p值))
+    if (i < nrow(ns_a)) cat("、")
+  }
+  cat("，在多元模型中可认为对样本期内超额波动**解释力有限**。\n")
+}
+```
+
+## 3.3 版本 B：主成分多元回归
+
+使用第二部分建议的主成分（`使用主成分`）作为解释变量，避免原始因子共线性带来的系数不稳定。
+
+```{r part3-reg-pc}
+公式B <- as.formula(
+  paste("每日超额因子 ~", paste(使用主成分, collapse = " + "))
+)
+模型B <- lm(公式B, data = 分析数据)
+结果B <- 整理回归结果(模型B)
+
+kable(
+  select(结果B$系数表, 变量中文名, 变量, 估计值, 标准误, t值, p值, 显著性),
+  digits  = 4,
+  caption = paste0(
+    "表 7：版本 B — 主成分回归（",
+    paste(使用主成分, collapse = " + "),
+    "）"
+  )
+)
+```
+
+```{r part3-interpret-b, echo=FALSE, results='asis'}
+cat("**p 值怎么读？** 与版本 A 相同：主成分系数 γ 的 p 值越小，说明该 **PC 对超额收益越重要**。PC 是多个原始因子的线性组合，显著的主成分需结合第二部分载荷表理解其风格含义。\n\n")
+
+sig_b <- filter(结果B$系数表, 变量 != "(Intercept)", p值 < 0.05)
+weak_b <- filter(结果B$系数表, 变量 != "(Intercept)", p值 >= 0.05 & p值 < 0.10)
+ns_b <- filter(结果B$系数表, 变量 != "(Intercept)", p值 >= 0.10)
+alpha_b <- filter(结果B$系数表, 变量 == "(Intercept)")
+
+cat("**本表结论（版本 B）：**\n\n")
+if (alpha_b$p值[1] < 0.05) {
+  cat(sprintf("- **截距 α**（p = %.4f）：显著，扣除主成分后仍有无法被 PC 解释的正向超额。\n", alpha_b$p值[1]))
+}
+if (nrow(sig_b) > 0) {
+  ord <- order(sig_b$p值)
+  cat("- **对超额解释最重要的主成分**（p < 0.05，p 越小越重要）：")
+  for (i in seq_len(nrow(sig_b))) {
+    r <- sig_b[ord[i], ]
+    cat(sprintf(" %s（γ = %+.4f，p = %.4f）", r$变量, r$估计值, r$p值))
+    if (i < nrow(sig_b)) cat("；")
+  }
+  cat("。\n")
+}
+if (nrow(ns_b) > 0) {
+  cat("- **对超额解释不显著**（p ≥ 0.05）：")
+  for (i in seq_len(nrow(ns_b))) {
+    r <- ns_b[i, ]
+    cat(sprintf("%s（p = %.4f）", r$变量, r$p值))
+    if (i < nrow(ns_b)) cat("、")
+  }
+  cat("。这些 PC 虽解释因子间波动，但对产品超额**贡献有限**（与 2.5 结论一致）。\n")
+}
+```
+
+## 3.4 两种模型对比
+
+```{r part3-compare}
+模型对比 <- tibble(
+  指标 = c("R²", "调整 R²", "AIC", "BIC", "残差标准误"),
+  版本A_筛选因子 = c(
+    结果A$R2,
+    结果A$调整R2,
+    AIC(模型A),
+    BIC(模型A),
+    summary(模型A)$sigma
+  ),
+  版本B_主成分 = c(
+    结果B$R2,
+    结果B$调整R2,
+    AIC(模型B),
+    BIC(模型B),
+    summary(模型B)$sigma
+  )
+)
+
+kable(
+  模型对比,
+  digits  = 4,
+  caption = "表 8：两种回归模型拟合效果对比"
+)
+
+较优模型 <- if (结果B$调整R2 > 结果A$调整R2) "版本 B（主成分）" else "版本 A（筛选因子）"
+```
+
+## 3.5 拟合值与残差：风格解释 vs alpha
+
+表 9 对比 **版本 A（筛选因子回归）** 与 **版本 B（主成分回归）** 两种模型下，样本期平均超额收益如何拆成「截距 α（风格无法解释的部分）」与「风格拟合（因子/主成分能解释的部分）」；左列、右列分别对应两种归因口径，便于对照同一指标在两种模型下的差异。
+
+```{r part3-attribution, fig.width=9, fig.height=4.5}
+归因数据 <- mutate(
+  分析数据,
+  版本A_拟合 = fitted(模型A),
+  版本A_残差 = residuals(模型A),
+  版本B_拟合 = fitted(模型B),
+  版本B_残差 = residuals(模型B)
+)
+
+# 截距 = 周均 alpha；残差均值应接近 0
+alphaA <- coef(模型A)[1]
+alphaB <- coef(模型B)[1]
+
+归因汇总 <- tibble(
+  指标 = c(
+    "周均超额收益",
+    "截距 α（周均无法被因子解释的部分）",
+    "风格拟合均值",
+    "残差均值"
+  ),
+  `版本 A（筛选因子）` = sprintf(
+    "%.4f",
+    c(
+      mean(归因数据$每日超额因子),
+      alphaA,
+      mean(归因数据$版本A_拟合 - alphaA),
+      mean(归因数据$版本A_残差)
+    )
+  ),
+  `版本 B（主成分）` = sprintf(
+    "%.4f",
+    c(
+      mean(归因数据$每日超额因子),
+      alphaB,
+      mean(归因数据$版本B_拟合 - alphaB),
+      mean(归因数据$版本B_残差)
+    )
+  )
+)
+
+knitr::kable(
+  归因汇总,
+  align   = c("l", "r", "r"),
+  caption = "表 9：超额收益归因分解（左列 = 版本 A，右列 = 版本 B）"
+)
+```
+
+**读表说明：** 每一行有**两个独立数字**，左列为版本 A（筛选因子回归），右列为版本 B（主成分回归）。例如「周均超额收益」一行：版本 A = **`r 归因汇总[["版本 A（筛选因子）"]][1]`**，版本 B = **`r 归因汇总[["版本 B（主成分）"]][1]`**（二者应接近，均为样本期平均超额）。
+
+```{r part3-attribution-plot-a, fig.width=9, fig.height=4.5}
+ggplot(归因数据, aes(x = 版本A_拟合, y = 每日超额因子)) +
+  geom_point(alpha = 0.7, color = "#2166AC") +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "#B2182B") +
+  geom_smooth(method = "lm", se = TRUE, color = "gray40", size = 0.7) +
+  labs(
+    title = "图 6：版本 A — 实际超额 vs 因子拟合超额",
+    x     = "拟合超额（风格解释部分）",
+    y     = "实际超额"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+```
+
+```{r part3-attribution-b, fig.width=9, fig.height=4.5}
+ggplot(归因数据, aes(x = 版本B_拟合, y = 每日超额因子)) +
+  geom_point(alpha = 0.7, color = "#2166AC") +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "#B2182B") +
+  geom_smooth(method = "lm", se = TRUE, color = "gray40", size = 0.7) +
+  labs(
+    title = "图 7：版本 B — 实际超额 vs 主成分拟合超额",
+    x     = "拟合超额（主成分解释部分）",
+    y     = "实际超额"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+```
+
+## 3.6 研究结论与局限性
+
+### 研究结论
+
+在 `r nrow(分析数据)` 周样本内，筛选 Barra 因子可解释约 **`r sprintf("%.0f%%", 结果A$R2 * 100)`** 的超额波动，调整 R² 约 **`r sprintf("%.0f%%", 结果A$调整R2 * 100)`**。规模、成长暴露显著为负，截距 alpha 显著为正。PCA 主成分回归调整 R² 约 **`r sprintf("%.0f%%", 结果B$调整R2 * 100)`**，略低于因子版，因 PCA 按因子波动而非超额相关性构造，PC1、PC2 对超额解释力弱。综合来看，产品超额与**规模风格**关系最明显，但仍有约 **`r sprintf("%.0f%%", (1 - 结果A$R2) * 100)`** 波动无法被所选 Barra 因子线性解释，需结合样本期短、归因口径简化等局限性谨慎解读。
+
+### 产品涨跌与什么有关？（Barra 风格解读）
+
+结合表 1 相关性与表 6 回归，样本期内产品超额（相对中证 1000）主要与以下因素有关：
+
+| 维度 | 判断 | 通俗理解 |
+|------|------|----------|
+| **规模（size）** | 相关最强（r ≈ `r sprintf("%.2f", 超额因子相关$相关系数[1])`），回归显著负向 | 样本期内，产品超额收益与规模风格的关系最明显。规模因子表现较强时，产品相对中证 1000 的超额收益往往走弱；规模因子走弱时，产品超额表现反而更好。这说明产品的超额并不是简单依赖“小盘行情”或中证 1000 整体上涨，而更可能与其相对基准的规模暴露差异有关」的类型 |
+| **成长（growth）** | 多元回归显著负向 | 成长风格涨得多时，超额倾向走弱；与偏价值/低成长暴露或持仓结构有关 |
+| **杠杆、中市值等** | 单因子相关有一定关系，多元回归不显著 | 杠杆、中市值等因子在单因子相关性中有一定线索，但在多元回归中解释力不稳定，因此更适合作为辅助观察变量，而不宜作为主要结论。动量、行业类 proxy 等因子与超额收益的线性关系较弱，说明样本期内产品超额并不主要由追涨动量或简单行业轮动解释。 |
+| **动量、行业类 proxy 等** | 与超额几乎无线性相关 | 样本内**难以用**「追热点、动量行情」解释超额。 |
+| **截距 α** | 显著为正 | 回归截距 alpha 显著为正。也就是说，在扣除规模、成长等主要 Barra 风格影响后，产品仍保留一部分稳定的正超额收益。这部分更可能来自选股能力、组合配置、交易执行，或 Barra 风格因子未覆盖的其他收益来源，而不是单一风格 beta 暴露。|
+
+### 局限性
+
+- 样本量有限（约 `r nrow(分析数据)` 周），统计检验功效受限；
+- 仅考察线性关系，未控制时变暴露与滞后效应；
+- 超额收益为算术差，与 Barra 组合收益口径可能存在差异；
+- 相关与回归结果均为样本内拟合，不代表未来持续有效。
+
+```{r part3-opts-reset, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```

@@ -1,0 +1,270 @@
+---
+title: "AS assignment"
+author: "Yuxiang Wu"
+date: "2026-03-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Question1:The Dramatic US Presidential Election 2000
+
+
+```{r}
+elections <- read.table("BushGore.dat", header = TRUE)
+
+# scatterplot
+plot(elections$Perot,
+     elections$Buchanan,
+     xlab = "Perot votes in 1996",
+     ylab = "Buchanan votes in 2000",
+     pch  = 19)
+
+# Palm Beach index and highlight
+pb_index <- which(elections$County == "PalmBeach")
+
+points(elections$Perot[pb_index],
+       elections$Buchanan[pb_index],
+       col  = "red",
+       pch  = 19,
+       cex  = 1.3)
+
+text(elections$Perot[pb_index],
+     elections$Buchanan[pb_index],
+     labels = "Palm Beach",
+     pos    = 4,
+     cex    = 0.8,
+     col    = "red")
+```
+
+By looking at this scatterplot, we can see that there is a strong positive relationship between Perot votes in 1996 and Buchanan votes in 2000. Most counties follow this general pattern, but Palm Beach is far above the main group, so it looks unusual straight away.
+
+```{r}
+model_all <- lm(Buchanan ~ Perot, data = elections)
+
+# standard diagnostic plots
+par(mfrow = c(2, 2))
+plot(model_all)
+par(mfrow = c(1, 1))
+
+# sample size
+n <- nrow(elections)
+
+# leverage, standardized residuals, Cook's distance
+leverages     <- hatvalues(model_all)
+std_residuals <- rstandard(model_all)
+cooks_d       <- cooks.distance(model_all)
+
+# Palm Beach diagnostics
+leverages[pb_index]
+std_residuals[pb_index]
+cooks_d[pb_index]
+
+```
+From the diagnostic plots, Palm Beach stands out very clearly. Its standardized residual is about 7.75, which is extremely large, and its leverage is about 0.119, which is also extremely large. Its Cook’s distance is about 4.06, which is far above 1. Thus all of  these give strong evidence that Palm Beach is an influential observation.
+```{r}
+# refit model without Palm Beach
+elections_noPB <- elections[elections$County != "PalmBeach", ]
+
+model_noPB <- lm(Buchanan ~ Perot, data = elections_noPB)
+
+summary(model_all)
+summary(model_noPB)
+
+# AIC comparison
+AIC(model_all)
+AIC(model_noPB)
+```
+In addition, when we compare the two fitted models: one with Palm Beach included and the another one is not. I can also prove that the observation for Palm Beach County has a strong influence on fitted simple linear regression model. For model with Palm Beach,the slope is about 0.0357 and R-squared is about 0.51. After removing Palm Beach, the slope drops to about 0.0241 and R-squared increases to about 0.85, while the residual standard error falls a lot. Moreover,the AIC becomes smaller after Palm Beach is removed, which means the second model fits the data better So Palm Beach has a strong influence on the fitted regression line.
+```{r}
+# Perot votes for Palm Beach
+pb_Perot <- elections$Perot[pb_index]
+
+# prediction from model without Palm Beach
+prediction_pb <- predict(model_noPB,
+                         newdata  = data.frame(Perot = pb_Perot),
+                         interval = "prediction",
+                         level    = 0.95)
+
+# compare with observed Buchanan votes
+actual_pb <- elections$Buchanan[pb_index]
+
+cbind(observed = actual_pb,
+      prediction_pb)
+```
+To check whether Buchanan received more votes than expected in Palm Beach, I used the model without Palm Beach to predict Buchanan votes at Palm Beach’s Perot value. The predicted value is about 788, with a 95% prediction interval from about 600 to 976. The actual Buchanan vote in Palm Beach is 3407, which is far above the upper end of this interval. So there is very strong evidence that Buchanan received more votes than expected in Palm Beach County.
+
+
+# Question2 Respiratory Rates for Children:
+
+
+
+```{r q2b}
+respiratoryrates <- readRDS("RespiratoryRates.rds")
+
+plot(respiratoryrates$Age,
+     respiratoryrates$Rate,
+     xlab = "Age (months)",
+     ylab = "Respiratory rate (breaths per minute)",
+     pch  = 19)
+
+fit <- lm(Rate ~ Age, data = respiratoryrates)
+
+b0 <- coef(fit)[1]
+b1 <- coef(fit)[2]
+sig <- summary(fit)$sigma
+age_grid <- seq(min(respiratoryrates$Age), max(respiratoryrates$Age), length.out = 200)
+mu_age <- b0 + b1 * age_grid
+# percentile curves: q(p, Age) = mu(Age) + sigma * qnorm(p)
+lines(age_grid, mu_age + sig * qnorm(0.01), col = "pink", lwd = 2)
+lines(age_grid, mu_age + sig * qnorm(0.05), col = "green3", lwd = 2)
+lines(age_grid, mu_age + sig * qnorm(0.5),  col = "brown", lwd = 2)
+lines(age_grid, mu_age + sig * qnorm(0.95), col = "green3", lwd = 2)
+lines(age_grid, mu_age + sig * qnorm(0.99), col = "pink", lwd = 2)
+legend("topright",
+       legend = c("1%", "5%", "50%", "95%", "99%"),
+       col   = c("pink", "green3", "brown", "green3", "pink"),
+       lty   = 1,
+       lwd   = 2,
+       bty   = "n")
+```
+
+The scatterplot shows a clear negative relationship between age and respiratory rate, so a simple linear model is a reasonable first choice. This suggests that younger children tend to have higher respiratory rates, and the average respiratory rate decreases as age increases.
+
+Using the fitted model, I estimated the \(1\%\), \(5\%\), \(50\%\), \(95\%\), and \(99\%\) percentile curves from
+\[
+q(p,\text{Age}) = \mu(\text{Age}) + \sigma \Phi^{-1}(p).
+\]
+All five curves slope downward, which is consistent with the data. The \(50\%\) curve gives the median respiratory rate, while the \(1\%\) and \(5\%\) curves represent unusually low values and the \(95\%\) and \(99\%\) curves represent unusually high values for a given age.
+
+This plot provides a useful reference range for normal respiratory rates in children aged \(0\) to \(3\) years. A child with a respiratory rate near the middle curve would be typical for their age, while values far above or below the outer curves may be considered unusual.
+
+# Question3:Crime Rate in Florida
+## 3a:pairwise correlation and linear regression model
+```{r}
+# load data
+Florida <- readRDS("Florida.rds")
+
+# pairwise correlations (numeric columns only; County is character)
+cor(Florida[, c("Crime", "Income", "Education", "Urbanization")])
+
+# simple linear regression: crime rate on each predictor separately
+m_income <- lm(Crime ~ Income, data = Florida)
+m_edu    <- lm(Crime ~ Education, data = Florida)
+m_urban  <- lm(Crime ~ Urbanization, data = Florida)
+
+summary(m_income)
+summary(m_edu)
+summary(m_urban)
+```
+
+From the correlation matrix, crime rate is positively correlated with income, education, and urbanization, with the strongest correlation being with urbanization(0.6773678). The predictors are also strongly correlated with each other, especially income, education, and urbanization, so confounding may be important.
+
+The three simple linear regressions all give positive and significant slopes. This suggests that, when each predictor is considered separately, counties with higher income, higher education, or higher urbanization tend to have higher crime rates. Among the three models, urbanization has the strongest simple relationship with crime rate and gives the largest \(R^2\). Overall, part (a) shows clear positive associations, but these results should be interpreted carefully because the predictors are themselves highly related(and i will do this in 3b and 3c).
+
+## 3b Fitting and compare the regression models:
+
+```{r}
+m_ie  <- lm(Crime ~ Income + Education, data = Florida)
+m_iu  <- lm(Crime ~ Income + Urbanization, data = Florida)
+m_eu  <- lm(Crime ~ Education + Urbanization, data = Florida)
+
+# full model with all three predictors
+m_all <- lm(Crime ~ Income + Education + Urbanization, data = Florida)
+
+summary(m_ie)
+summary(m_iu)
+summary(m_eu)
+summary(m_all)
+```
+
+In the model with Income and Education, both coefficients stay positive, but neither is clearly significant once the other is included. In the model with Income and Urbanization, we see that the coefficient of Income changes from positive to negative(-0.7906) and becomes non-significant, while Urbanization remains positive and highly significant. In the model with Education and Urbanization, the coefficient of Education also changes from positive to negative(-0.5834) and becomes non-significant, while Urbanization again stays positive and highly significant.
+
+In the full model with all three predictors, only Urbanization remains significant, with an estimated coefficient of about 0.697. Both Income and Education are negative and non-significant after controlling for the other variables. This suggests that the positive effects of Income and Education seen in the simple regressions were at least partly due to confounding, since both variables are strongly related to Urbanization. Overall, Urbanization seems to have the strongest and most stable association with crime rate, while the effects of Income and Education become weak after the adjustment.
+
+## 3c explaiantion to a layperson:
+It seems that crime rate is higher in counties that are more urban. At first, income and education also look positively related to crime rate when they are studied one at a time. However, this does not mean that higher income or higher education directly leads to higher crime.
+
+The main reason is that these predictors are related to each other. Counties with higher income or education also tend to be more urban, and urbanization is the variable that stays important after controlling for the others. So the simple regressions give part of the picture, but the multiple regression suggests that urbanization is the main factor most strongly associated with crime rate in this dataset.
+
+# Question4 Course Evaluations at the University of Texas at Austin
+
+## 4a Exploratory analysis
+
+```{r}
+load("TeachingRatings.Rdata")
+
+names(TeachingRatings)
+summary(TeachingRatings)
+
+# eval vs beauty
+plot(TeachingRatings$beauty,
+     TeachingRatings$eval,
+     xlab = "beauty",
+     ylab = "eval",
+     pch = 19)
+abline(lm(eval ~ beauty, data = TeachingRatings), col = "red", lwd = 2)
+
+# eval by each factor 
+par(mfrow = c(2, 3))
+boxplot(eval ~ sex, data = TeachingRatings, xlab = "sex", ylab = "eval")
+boxplot(eval ~ minority, data = TeachingRatings, xlab = "minority", ylab = "eval")
+boxplot(eval ~ native, data = TeachingRatings, xlab = "native", ylab = "eval")
+boxplot(eval ~ division, data = TeachingRatings, xlab = "division", ylab = "eval")
+boxplot(eval ~ tenure, data = TeachingRatings, xlab = "tenure", ylab = "eval")
+par(mfrow = c(1, 1))
+```
+
+## 4b Models: beauty and adjusters
+
+```{r}
+# simple: eval on beauty only
+m0 <- lm(eval ~ beauty, data = TeachingRatings)
+summary(m0)
+
+# full model: beauty + all other predictors
+mf <- lm(eval ~ beauty + age + minority + native + division + sex + tenure,
+             data = TeachingRatings)
+summary(mf)
+
+# reduced model: drop non-significant variables (age, minority, division) from full model
+m_drop <- lm(eval ~ beauty + native + sex + tenure, data = TeachingRatings)
+summary(m_drop)
+
+```
+
+**Rationale for the models.** We chose to include age, minority, native, division, sex, and tenure as adjustment variables because they may be related to both beauty and evaluation, so they are potential confounders. We fit eval on beauty only (m0), then the full model with all six adjusters (mf), so that we can compare how the estimated effect of beauty changes when we control for the other variables. In mf we found that age, minority, and division were not significant at the 0.05 level, while beauty, native, sex, and tenure were significant. We therefore fitted a reduced model (m_drop) that keeps only beauty and these three significant adjusters (native, sex, tenure). In m0 the beauty coefficient is about 0.133; in mf and m_drop it remains positive and significant and similar in size, so we use the reduced model as our final model for a simpler summary.
+
+## 4c Final model, diagnostics and conclusions
+
+```{r}
+par(mfrow = c(2, 2))
+plot(m_drop)
+par(mfrow = c(1, 1))
+```
+
+Mathematical formulation of the final model: After fitting the full model we dropped the non-significant predictors (age, minority, division) and kept only beauty and the three significant adjusters (native, sex, tenure). We write this final model as
+\[
+\text{eval} = \beta_0 + \beta_1\,\text{beauty} + \beta_2\,\text{native} + \beta_3\,\text{sex} + \beta_4\,\text{tenure} + \varepsilon.
+\]
+Categorical predictors (native, sex, tenure) are included as in the fitted model (e.g. dummy coding with a reference category). We assume that the errors \(\varepsilon\) are independent, have mean zero, constant variance \(\sigma^2\), and are normally distributed.
+
+Choice of the final model:We first fitted the full model with beauty and all six adjusters. Age, minority, and division were not significant at the 0.05 level, so we refitted a reduced model with only beauty, native, sex, and tenure. We take this reduced model as our final model because it is simpler and retains only the predictors that were significant in the full model; the beauty effect and conclusions are similar in both models. The residual plots above are for this final (reduced) model and suggest that the model assumptions are reasonably met.
+
+Conclusions: In the final model (m_drop), the coefficient of beauty is about 0.14 (p ≈ 4e-05), which means one unit increase in beauty can increase about 0.14 unit in evaluation score, so beauty has a positive and statistically significant effect on evaluation score even after we control for native, sex, and tenure. The relationship between beauty and evaluation does not appear to be due only to confounding. The model’s R² is about 0.10. This means only about 10% of the variation in evaluation scores is explained by beauty, native, sex, and tenure together; the rest is due to other factors we did not include (e.g. the class size).Among the other predictors in this model, native (non-native vs native English), sex (female vs male), and tenure (yes vs no) are statistically significant.
+
+We also look at the four residual plots to check the model assumptions:
+
+In the Residuals vs Fitted plot, the points are scattered around the horizontal line at zero without a clear curve or pattern, and the red smoothed line is quite flat. The spread of the residuals looks fairly even across the range of fitted values (from about 3.6 to 4.4), so the linearity and constant-variance assumptions seem reasonable. 
+
+In the Q–Q plot, most points lie close to the dashed reference line, so the residuals appear roughly normally distributed; a few points at the upper right tail (e.g. 680) curve away from the line, which might mean a few observations are a bit extreme, but overall the normality assumption looks acceptable. 
+
+In the Scale–Location plot, the red line is mostly flat and horizontal, so again the spread of the errors does not seem to change much with fitted values and the constant-variance assumption is supported. 
+
+In the Residuals vs Leverage plot, most points are in the lower-left corner (low leverage and small residuals). A few points such as 215 and 451 sit further out with higher leverage and larger residuals and are close to the Cook’s distance curve, so they may have some influence on the fit, but they do not appear to exceed a strong influence threshold, so we just note them. On the whole, the four plots do not show serious violations of the model assumptions, so the conclusions about the beauty effect are reasonable to use.
+
+
+

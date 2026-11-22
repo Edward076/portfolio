@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>项目报告</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 16mm 12mm;
+    }
+    body {
+      font-family: "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+      max-width: 960px;
+      margin: 40px auto;
+      padding: 0 20px;
+      line-height: 1.75;
+      color: #222;
+    }
+    h1, h2, h3 { line-height: 1.4; }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 16px 0;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: left;
+    }
+    th { background: #f6f8fa; }
+    code {
+      background: #f5f5f5;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    blockquote {
+      margin: 12px 0;
+      padding: 10px 14px;
+      border-left: 4px solid #ddd;
+      background: #fafafa;
+    }
+    img {
+      display: block;
+      max-width: 100%;
+      width: auto;
+      height: auto;
+      margin: 12px auto;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    @media print {
+      body {
+        max-width: none;
+        margin: 0;
+        padding: 0;
+      }
+      img {
+        max-width: 92%;
+      }
+    }
+  </style>
+</head>
+<body>
+<h1>基于Barra因子敏感度的中证1000指数增强基金风险画像与风险预警研究</h1>
+<h2>一、研究背景与目标</h2>
+<p>本项目面向基金风险研究场景，基于基金净值、中证1000指数与Barra因子序列，完成从风险暴露估计到未来风险预警的完整流程。<br />
+研究目标不是预测“哪只基金收益最高”，而是识别“哪只基金未来风险可能升高”。</p>
+<p>核心目标如下：</p>
+<ol>
+<li>估计基金对Barra因子的动态敏感度。</li>
+<li>构建基金风险画像，识别风格稳定性与主动风险特征。</li>
+<li>构建未来4周风险标签，检验风险预警可行性。</li>
+<li>使用轻量机器学习模型（Logistic/LASSO Logistic）与树模型（LightGBM/XGBoost）进行风险状态预测。</li>
+</ol>
+<hr />
+<h2>二、数据与样本说明</h2>
+<p>数据来源：</p>
+<ul>
+<li>6只中证1000指数增强基金净值数据（周频为主，个别基金原始为日频后转周频）。</li>
+<li>中证1000指数周线数据。</li>
+<li>Barra风格因子数据（先由因子水平序列转换为周收益）。</li>
+</ul>
+<p>样本与对齐后规模：</p>
+<ul>
+<li>基础面板（step2）：<code>744</code> 行，<code>20</code> 列。</li>
+<li>覆盖时间：<code>2022-07-15</code> 至 <code>2026-06-26</code>。</li>
+<li>基金数量：<code>6</code> 只。</li>
+</ul>
+<p>说明：本项目使用非平衡面板，不强制所有基金样本长度一致。</p>
+<hr />
+<h2>三、方法流程与实现步骤</h2>
+<h3>Step1 数据读取</h3>
+<p>读取Barra原始数据、指数数据、基金净值数据。</p>
+<h3>Step2 清洗与对齐</h3>
+<ol>
+<li>基金复权净值转周收益率。  </li>
+<li>指数收盘价转周收益率。  </li>
+<li>Barra因子水平转周收益率。  </li>
+<li>按“基金-日期”构建非平衡面板，生成：</li>
+<li><code>基金收益率</code></li>
+<li><code>指数收益率</code></li>
+<li><code>超额收益</code></li>
+<li>各Barra因子周收益</li>
+</ol>
+<h3>Step3 基础风险指标</h3>
+<p>按基金滚动12周计算：</p>
+<ul>
+<li><code>跟踪误差_12周</code></li>
+<li><code>信息比率_12周</code></li>
+<li><code>最大回撤_12周</code></li>
+<li><code>胜率_12周</code></li>
+</ul>
+<p>有效样本数（每项）：<code>678</code>（前11周窗口不足为缺失值，属正常现象）。</p>
+<h3>Step4 滚动Barra回归（核心）</h3>
+<p>滚动窗口：12周。<br />
+模型形式：</p>
+<p>[
+超额收益 = 截距 + 各因子暴露 \times 因子收益 + 残差
+]</p>
+<p>当前采用核心5因子（稳健版本）：</p>
+<ul>
+<li>规模</li>
+<li>动量</li>
+<li>流动性</li>
+<li>波动率</li>
+<li>账面市值比</li>
+</ul>
+<p>输出：</p>
+<ul>
+<li><code>超额收益截距_12周</code></li>
+<li><code>拟合优度_12周</code></li>
+<li><code>残差波动_12周</code></li>
+<li>各核心因子暴露（12周）</li>
+</ul>
+<p>说明：仅使用5因子是因为12周窗口下若因子过多，会导致自由度不足、系数不稳定、解释性下降。</p>
+<h3>Step5 风格漂移得分</h3>
+<p>对每个因子暴露计算相对52周滚动均值偏离：</p>
+<p>[
+漂移幅度 = |当前暴露 - 52周滚动均值|
+]</p>
+<p>再对多个因子漂移幅度求和，得到：</p>
+<ul>
+<li><code>风格漂移得分_52周</code></li>
+<li><code>风格漂移得分_52周_4周均值</code>（短期平滑）</li>
+</ul>
+<h3>Step6 基金风险画像</h3>
+<p>按基金聚合后，构建：</p>
+<ul>
+<li>Barra敏感度等级（高/中/低）</li>
+<li>风格稳定性等级（稳定/中等/不稳定）</li>
+<li>主动风险等级（高/中/低）</li>
+<li>风险画像标签</li>
+</ul>
+<h3>Step7 未来风险标签（前瞻4周）</h3>
+<p>构建以下目标变量：</p>
+<ul>
+<li><code>未来高跟踪误差标签_4周</code></li>
+<li><code>未来回撤风险标签_4周</code></li>
+<li><code>未来高残差波动标签_4周</code></li>
+</ul>
+<p>标签口径：</p>
+<ul>
+<li>跟踪误差、残差波动：按基金自身历史75%分位数阈值。</li>
+<li>回撤风险：未来4周最大回撤 &lt; -3% 记为1。</li>
+</ul>
+<h3>Step8 机器学习预警</h3>
+<p>目标：预测 <code>未来高跟踪误差标签_4周</code>。<br />
+模型：</p>
+<ul>
+<li>Logistic Regression</li>
+<li>LASSO Logistic Regression（变量筛选）</li>
+<li>LightGBM（非线性树模型）</li>
+<li>XGBoost（梯度提升树模型）</li>
+</ul>
+<p>切分：按时间切分训练/测试，避免未来数据泄露。</p>
+<h3>Step9 可视化与总览导出</h3>
+<p>已导出：</p>
+<ul>
+<li>风格漂移曲线</li>
+<li>跟踪误差曲线</li>
+<li>风险画像标签分布图</li>
+<li>项目总览工作簿与摘要文件</li>
+</ul>
+<hr />
+<h2>四、核心结果与解读</h2>
+<h2>4.1 基金风险画像结果（step6）</h2>
+<table>
+<thead>
+<tr>
+<th>基金</th>
+<th>Barra敏感度等级</th>
+<th>风格稳定性等级</th>
+<th>主动风险等级</th>
+<th>风险画像标签</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>基金_1</td>
+<td>低</td>
+<td>中等</td>
+<td>中</td>
+<td>均衡过渡型</td>
+</tr>
+<tr>
+<td>基金_2</td>
+<td>高</td>
+<td>不稳定</td>
+<td>高</td>
+<td>风格漂移高风险型</td>
+</tr>
+<tr>
+<td>基金_3</td>
+<td>低</td>
+<td>稳定</td>
+<td>低</td>
+<td>稳健低主动风险型</td>
+</tr>
+<tr>
+<td>基金_4</td>
+<td>中</td>
+<td>稳定</td>
+<td>高</td>
+<td>均衡过渡型</td>
+</tr>
+<tr>
+<td>基金_5</td>
+<td>中</td>
+<td>不稳定</td>
+<td>中</td>
+<td>均衡过渡型</td>
+</tr>
+<tr>
+<td>基金_6</td>
+<td>高</td>
+<td>中等</td>
+<td>低</td>
+<td>均衡过渡型</td>
+</tr>
+</tbody>
+</table>
+<p>解读：</p>
+<ul>
+<li><code>基金_2</code> 同时出现高敏感度+不稳定+高主动风险，属于重点监控对象。</li>
+<li><code>基金_3</code> 风格稳定且主动风险低，呈现稳健特征。</li>
+<li>其余基金处于中间状态，建议结合时间维度持续跟踪。</li>
+</ul>
+<h2>4.2 未来风险标签分布（step7）</h2>
+<p>平均标签占比：</p>
+<ul>
+<li><code>未来高跟踪误差标签_4周</code>：约 <code>25.14%</code></li>
+<li><code>未来回撤风险标签_4周</code>：约 <code>33.47%</code></li>
+<li><code>未来高残差波动标签_4周</code>：约 <code>25.15%</code></li>
+</ul>
+<p>解读：</p>
+<ul>
+<li>风险事件占比不算极端稀少，具备分类建模基础。</li>
+<li>回撤风险占比相对更高，说明下行风险在样本期内较为值得关注。</li>
+</ul>
+<h2>4.3 机器学习预警结果（step8）</h2>
+<table>
+<thead>
+<tr>
+<th>模型</th>
+<th style="text-align: right;">分类阈值</th>
+<th style="text-align: right;">AUC</th>
+<th style="text-align: right;">PR_AUC</th>
+<th style="text-align: right;">Recall</th>
+<th style="text-align: right;">Precision</th>
+<th style="text-align: right;">F1</th>
+<th style="text-align: right;">Accuracy</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Logistic</td>
+<td style="text-align: right;">0.200</td>
+<td style="text-align: right;">0.5102</td>
+<td style="text-align: right;">0.3046</td>
+<td style="text-align: right;">0.8780</td>
+<td style="text-align: right;">0.3529</td>
+<td style="text-align: right;">0.5035</td>
+<td style="text-align: right;">0.4453</td>
+</tr>
+<tr>
+<td>LASSO Logistic</td>
+<td style="text-align: right;">0.350</td>
+<td style="text-align: right;">0.4976</td>
+<td style="text-align: right;">0.2991</td>
+<td style="text-align: right;">0.7561</td>
+<td style="text-align: right;">0.3827</td>
+<td style="text-align: right;">0.5082</td>
+<td style="text-align: right;">0.5312</td>
+</tr>
+<tr>
+<td>LightGBM</td>
+<td style="text-align: right;">0.640</td>
+<td style="text-align: right;">0.5038</td>
+<td style="text-align: right;">0.3380</td>
+<td style="text-align: right;">0.0488</td>
+<td style="text-align: right;">0.3333</td>
+<td style="text-align: right;">0.0851</td>
+<td style="text-align: right;">0.6641</td>
+</tr>
+<tr>
+<td>XGBoost</td>
+<td style="text-align: right;">0.430</td>
+<td style="text-align: right;">0.5130</td>
+<td style="text-align: right;">0.3091</td>
+<td style="text-align: right;">0.0244</td>
+<td style="text-align: right;">0.0769</td>
+<td style="text-align: right;">0.0370</td>
+<td style="text-align: right;">0.5938</td>
+</tr>
+</tbody>
+</table>
+<p>LASSO筛选出的关键特征（11个）：</p>
+<ul>
+<li>因子暴露_规模_12周</li>
+<li>因子暴露_动量_12周</li>
+<li>因子暴露_流动性_12周</li>
+<li>因子暴露_波动率_12周</li>
+<li>因子暴露_账面市值比_12周</li>
+<li>超额收益截距_12周</li>
+<li>残差波动_12周</li>
+<li>信息比率_12周</li>
+<li>最大回撤_12周</li>
+<li>胜率_12周</li>
+<li>风格漂移得分_52周_4周均值</li>
+</ul>
+<p>解读：</p>
+<ul>
+<li>线性模型（Logistic、LASSO）在本轮实验中Recall与F1明显优于树模型，更适合“宁可多报”的预警场景。</li>
+<li>树模型（LightGBM、XGBoost）当前阈值下偏保守，误报少但漏报较多，需进一步调参和阈值策略优化。</li>
+<li>四个模型AUC整体接近0.5，说明当前样本与特征下区分度仍偏弱，暂定位为研究辅助工具。</li>
+</ul>
+<hr />
+<h2>五、项目中“机器学习”的体现</h2>
+<p>本项目的机器学习部分体现在Step8：</p>
+<ol>
+<li>使用监督学习框架预测未来风险状态（二分类）。</li>
+<li>采用时间切分训练/测试，符合时序建模规范。</li>
+<li>在保留Logistic与LASSO的基础上，引入LightGBM与XGBoost进行非线性对照建模。</li>
+<li>使用验证集进行阈值优化，再在测试集统一输出AUC、PR_AUC、Recall、Precision、F1、混淆矩阵，形成完整评估闭环。</li>
+</ol>
+<hr />
+<h2>六、局限性与后续优化方向</h2>
+<ol>
+<li>样本规模较小、基金数量有限，模型泛化能力受限。  </li>
+<li>12周窗口下为保证稳健性，核心回归仅选5个因子；其余因子可在后续稳健性分析中扩展。  </li>
+<li>目前预警目标以“未来高跟踪误差”为主，后续可增加多目标联合预警。  </li>
+<li>可考虑加入阈值优化、滚动重训练、类别不平衡处理等提升预测表现。  </li>
+</ol>
+<hr />
+<h2>七、结论</h2>
+<p>本项目已完成“风险识别 -&gt; 风格漂移监控 -&gt; 未来风险预警”的完整流程：</p>
+<ol>
+<li>成功估计6只基金的动态Barra因子暴露。  </li>
+<li>构建了可解释的基金风险画像体系，并识别出重点风险对象。  </li>
+<li>构建未来4周风险标签并完成Logistic、LASSO、LightGBM、XGBoost预警建模。  </li>
+<li>结果表明线性模型在当前数据上更稳健，树模型仍有优化空间，后续需通过样本扩充与特征增强继续提升。  </li>
+</ol>
+<p>整体上，本研究较好匹配基金风险研究岗位对“解释性、监控性、可落地性”的要求。</p>
+<hr />
+<h2>八、关键图表附录</h2>
+<h3>图A：风格漂移得分（52周，4周均值）</h3>
+<p><img alt="风格漂移得分图" src="step9_图1_风格漂移得分.png" /></p>
+<p>图A解读：</p>
+<ol>
+<li>该图反映各基金风格暴露相对自身长期均值（52周）的偏离程度，数值越高表示风格漂移越明显。  </li>
+<li><code>基金_1</code> 与 <code>基金_3</code> 在样本期内出现过多次抬升区间，说明其风格稳定性阶段性走弱，应结合市场环境进行重点复核。  </li>
+<li><code>基金_2</code>、<code>基金_5</code> 在样本后段出现较高点位，提示近期投资风格可能发生了较明显调整。  </li>
+<li>从风险监控角度，可将该指标作为“风格稳定性预警”信号，与跟踪误差、回撤等指标联合判断。  </li>
+</ol>
+<h3>图B：跟踪误差（12周滚动）</h3>
+<p><img alt="跟踪误差图" src="step9_图2_跟踪误差.png" /></p>
+<p>图B解读：</p>
+<ol>
+<li>该图展示各基金相对中证1000基准的主动偏离强度，跟踪误差越高，代表组合与基准差异越大。  </li>
+<li><code>基金_3</code> 在2024年初附近出现阶段性高位，表明当期主动风险暴露显著上升。  </li>
+<li>样本后段多数基金维持在较低至中等区间，说明整体偏离强度可控，但<code>基金_2</code>等个别产品仍有上行波动，需要持续跟踪。  </li>
+<li>在预警应用中，可将“跟踪误差上行 + 风格漂移抬升”作为联合触发条件，用于识别潜在风险抬头阶段。  </li>
+</ol>
+<h3>图C：风险画像标签分布</h3>
+<p><img alt="风险画像标签分布图" src="step9_图3_风险画像标签分布.png" /></p>
+<hr>
+<p style="color:#666;font-size:13px;">由项目报告Markdown自动转换生成</p>
+</body>
+</html>
